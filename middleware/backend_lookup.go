@@ -222,18 +222,13 @@ func SRV(b ServiceBackend, zone string, state request.Request, opt Options) (rec
 				debug = append(debug, debugAddr...)
 			}
 			// IPv6 lookups here as well? AAAA(zone, state1, nil).
-		case msg.IPv4:
+
+		case msg.IPv4, msg.IPv6:
 			serv.Host = msg.Domain(serv.Key)
 			srv := serv.NewSRV(state.QName(), weight)
 
 			records = append(records, srv)
-			extra = append(extra, serv.NewA(srv.Target, ip))
-		case msg.IPv6:
-			serv.Host = msg.Domain(serv.Key)
-			srv := serv.NewSRV(state.QName(), weight)
-
-			records = append(records, srv)
-			extra = append(extra, serv.NewAAAA(srv.Target, ip))
+			extra = append(extra, newAddress(serv, srv.Target, ip, what))
 		}
 	}
 	return records, extra, debug, nil
@@ -292,14 +287,11 @@ func MX(b ServiceBackend, zone string, state request.Request, opt Options) (reco
 				debug = append(debug, debugAddr...)
 			}
 			// e.AAAA as well
-		case msg.IPv4:
+
+		case msg.IPv4, msg.IPv6:
 			serv.Host = msg.Domain(serv.Key)
 			records = append(records, serv.NewMX(state.QName()))
-			extra = append(extra, serv.NewA(serv.Host, ip))
-		case msg.IPv6:
-			serv.Host = msg.Domain(serv.Key)
-			records = append(records, serv.NewMX(state.QName()))
-			extra = append(extra, serv.NewAAAA(serv.Host, ip))
+			extra = append(extra, newAddress(serv, serv.Host, ip, what))
 		}
 	}
 	return records, extra, debug, nil
@@ -372,14 +364,11 @@ func NS(b ServiceBackend, zone string, state request.Request, opt Options) (reco
 		switch what {
 		case msg.Host:
 			return nil, nil, debug, fmt.Errorf("NS record must be an IP address: %s", serv.Host)
-		case msg.IPv4:
+
+		case msg.IPv4, msg.IPv6:
 			serv.Host = msg.Domain(serv.Key)
 			records = append(records, serv.NewNS(state.QName()))
-			extra = append(extra, serv.NewA(serv.Host, ip))
-		case msg.IPv6:
-			serv.Host = msg.Domain(serv.Key)
-			records = append(records, serv.NewNS(state.QName()))
-			extra = append(extra, serv.NewAAAA(serv.Host, ip))
+			extra = append(extra, newAddress(serv, serv.Host, ip, what))
 		}
 	}
 	return records, extra, debug, nil
@@ -451,6 +440,15 @@ func ErrorToTxt(err error) dns.RR {
 
 	t.Txt = []string{msg}
 	return t
+}
+
+// Might be candidate to move to msg/ as well.
+func newAddress(s msg.Service, name string, ip net.IP, what int) dns.RR {
+	if what == msg.IPv4 {
+		return &dns.A{Hdr: dns.RR_Header{Name: name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: s.TTL}, A: ip}
+	}
+	// Should always be msg.IPv6
+	return &dns.AAAA{Hdr: dns.RR_Header{Name: name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: s.TTL}, AAAA: ip}
 }
 
 const (
