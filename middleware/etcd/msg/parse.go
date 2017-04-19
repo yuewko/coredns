@@ -13,7 +13,6 @@ const (
 // ParseHost parses the Host field in s. It returns an address when the address resembles an IP
 // address (done with net.ParseIP) or nil when the Host is a name. What differentiates between
 // a hostname (Host), an IPv4 address (IPv4) or an IPv6 address (IPv6).
-// integer differentiates between IPv4 or IPv6 (
 func (s *Service) ParseHost() (addr net.IP, what int) {
 
 	ip := net.ParseIP(s.Host)
