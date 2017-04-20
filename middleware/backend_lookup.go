@@ -22,10 +22,10 @@ func A(b ServiceBackend, zone string, state request.Request, previousRecords []d
 
 	for _, serv := range services {
 
-		ip, what := serv.ParseHost()
+		what, ip := serv.Type()
 
 		switch what {
-		case msg.Host:
+		case dns.TypeANY:
 			if Name(state.Name()).Matches(dns.Fqdn(serv.Host)) {
 				// x CNAME x is a direct loop, don't add those
 				continue
@@ -70,10 +70,10 @@ func A(b ServiceBackend, zone string, state request.Request, previousRecords []d
 			records = append(records, m1.Answer...)
 			continue
 
-		case msg.IPv4:
+		case dns.TypeA:
 			records = append(records, serv.NewA(state.QName(), ip))
 
-		case msg.IPv6:
+		case dns.TypeAAAA:
 			// nodata?
 		}
 	}
@@ -89,10 +89,10 @@ func AAAA(b ServiceBackend, zone string, state request.Request, previousRecords 
 
 	for _, serv := range services {
 
-		ip, what := serv.ParseHost()
+		what, ip := serv.Type()
 
 		switch what {
-		case msg.Host:
+		case dns.TypeANY:
 			// Try to resolve as CNAME if it's not an IP, but only if we don't create loops.
 			if Name(state.Name()).Matches(dns.Fqdn(serv.Host)) {
 				// x CNAME x is a direct loop, don't add those
@@ -138,10 +138,10 @@ func AAAA(b ServiceBackend, zone string, state request.Request, previousRecords 
 			continue
 			// both here again
 
-		case msg.IPv4:
+		case dns.TypeA:
 			// nada?
 
-		case msg.IPv6:
+		case dns.TypeAAAA:
 			records = append(records, serv.NewAAAA(state.QName(), ip))
 		}
 	}
@@ -178,9 +178,11 @@ func SRV(b ServiceBackend, zone string, state request.Request, opt Options) (rec
 			w1 *= float64(serv.Weight)
 		}
 		weight := uint16(math.Floor(w1))
-		ip, what := serv.ParseHost()
+
+		what, ip := serv.Type()
+
 		switch what {
-		case msg.Host:
+		case dns.TypeANY:
 			srv := serv.NewSRV(state.QName(), weight)
 			records = append(records, srv)
 
@@ -223,7 +225,7 @@ func SRV(b ServiceBackend, zone string, state request.Request, opt Options) (rec
 			}
 			// IPv6 lookups here as well? AAAA(zone, state1, nil).
 
-		case msg.IPv4, msg.IPv6:
+		case dns.TypeA, dns.TypeAAAA:
 			serv.Host = msg.Domain(serv.Key)
 			srv := serv.NewSRV(state.QName(), weight)
 
@@ -246,9 +248,9 @@ func MX(b ServiceBackend, zone string, state request.Request, opt Options) (reco
 		if !serv.Mail {
 			continue
 		}
-		ip, what := serv.ParseHost()
+		what, ip := serv.Type()
 		switch what {
-		case msg.Host:
+		case dns.TypeANY:
 			mx := serv.NewMX(state.QName())
 			records = append(records, mx)
 			if _, ok := lookup[mx.Mx]; ok {
@@ -288,7 +290,7 @@ func MX(b ServiceBackend, zone string, state request.Request, opt Options) (reco
 			}
 			// e.AAAA as well
 
-		case msg.IPv4, msg.IPv6:
+		case dns.TypeA, dns.TypeAAAA:
 			serv.Host = msg.Domain(serv.Key)
 			records = append(records, serv.NewMX(state.QName()))
 			extra = append(extra, newAddress(serv, serv.Host, ip, what))
@@ -360,12 +362,12 @@ func NS(b ServiceBackend, zone string, state request.Request, opt Options) (reco
 	state.Req.Question[0].Name = old
 
 	for _, serv := range services {
-		ip, what := serv.ParseHost()
+		what, ip := serv.Type()
 		switch what {
-		case msg.Host:
+		case dns.TypeANY:
 			return nil, nil, debug, fmt.Errorf("NS record must be an IP address: %s", serv.Host)
 
-		case msg.IPv4, msg.IPv6:
+		case dns.TypeA, dns.TypeAAAA:
 			serv.Host = msg.Domain(serv.Key)
 			records = append(records, serv.NewNS(state.QName()))
 			extra = append(extra, newAddress(serv, serv.Host, ip, what))
@@ -443,7 +445,7 @@ func ErrorToTxt(err error) dns.RR {
 }
 
 // Might be candidate to move to msg/ as well.
-func newAddress(s msg.Service, name string, ip net.IP, what int) dns.RR {
+func newAddress(s msg.Service, name string, ip net.IP, what uint16) dns.RR {
 	if what == msg.IPv4 {
 		return &dns.A{Hdr: dns.RR_Header{Name: name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: s.TTL}, A: ip}
 	}
