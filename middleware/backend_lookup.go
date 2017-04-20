@@ -444,13 +444,15 @@ func ErrorToTxt(err error) dns.RR {
 	return t
 }
 
-// Might be candidate to move to msg/ as well.
 func newAddress(s msg.Service, name string, ip net.IP, what uint16) dns.RR {
-	if what == msg.IPv4 {
-		return &dns.A{Hdr: dns.RR_Header{Name: name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: s.TTL}, A: ip}
+
+	hdr := dns.RR_Header{Name: name, Rrtype: what, Class: dns.ClassINET, Ttl: s.TTL}
+
+	if what == dns.TypeA {
+		return &dns.A{Hdr: hdr, A: ip}
 	}
-	// Should always be msg.IPv6
-	return &dns.AAAA{Hdr: dns.RR_Header{Name: name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: s.TTL}, AAAA: ip}
+	// Should always be dns.TypeAAAA
+	return &dns.AAAA{Hdr: hdr, AAAA: ip}
 }
 
 const (
