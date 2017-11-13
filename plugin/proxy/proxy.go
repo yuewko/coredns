@@ -77,6 +77,7 @@ func (p Proxy) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 		for time.Since(start) < tryDuration {
 			host := upstream.Select()
 			if host == nil {
+				fmt.Println("ServeDNS: upstream.Select() returns nil")
 				return dns.RcodeServerFailure, fmt.Errorf("%s: %s", errUnreachable, "no upstream host")
 			}
 
@@ -143,10 +144,12 @@ func (p Proxy) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (
 }
 
 func (p Proxy) match(state request.Request) (u Upstream) {
+	fmt.Printf("Proxy::match(): state is '%v'\n", state)
 	if p.Upstreams == nil {
 		return nil
 	}
 
+	fmt.Printf("Proxy::match(): upstreams are '%v'\n", *p.Upstreams)
 	longestMatch := 0
 	for _, upstream := range *p.Upstreams {
 		from := upstream.From()
@@ -160,8 +163,9 @@ func (p Proxy) match(state request.Request) (u Upstream) {
 			u = upstream
 		}
 	}
-	return u
 
+	fmt.Printf("Proxy::match(): returning '%v'\n", u)
+	return u
 }
 
 // Name implements the Handler interface.

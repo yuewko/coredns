@@ -73,6 +73,8 @@ func NewStaticUpstreams(c *caddyfile.Dispenser) ([]Upstream, error) {
 
 		upstreams = append(upstreams, upstream)
 	}
+
+	fmt.Printf("NewStaticUpstreams: about to return upstreams: '%v'\n", upstreams)
 	return upstreams, nil
 }
 
