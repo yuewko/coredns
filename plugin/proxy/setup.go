@@ -4,6 +4,7 @@ import (
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
 
+	"fmt"
 	"github.com/mholt/caddy"
 )
 
@@ -15,6 +16,7 @@ func init() {
 }
 
 func setup(c *caddy.Controller) error {
+	fmt.Printf("(KODEBUG)plugin/proxy:setup called\n")
 	upstreams, err := NewStaticUpstreams(&c.Dispenser)
 	if err != nil {
 		return plugin.Error("proxy", err)

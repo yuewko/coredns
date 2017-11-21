@@ -1089,6 +1089,7 @@ func (s *Server) GracefulStop() {
 		return
 	}
 	for lis := range s.lis {
+		fmt.Printf("(KODEBUG)grpc::GracefulStop() about to close listener!!!!!!!!\n")
 		lis.Close()
 	}
 	s.lis = nil

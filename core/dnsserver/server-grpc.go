@@ -8,7 +8,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/miekg/dns"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"
@@ -24,6 +24,34 @@ type ServergRPC struct {
 	listenAddr net.Addr
 }
 
+type listenerTLS struct {
+	net.Listener
+	innerListener net.Listener
+	config *tls.Config
+}
+
+func (l listenerTLS) Dup() (net.Listener, error) {
+	fmt.Printf("(KODEBUG)server-grpc::listenerTLS:Dup() called!!!\n")
+	file, err := l.innerListener.(*net.TCPListener).File()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("(KODEBUG)()server-grpc::listenerTLS:Dup: old listener.File() OK\n")
+	ln, err := net.FileListener(file)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("(KODEBUG)server-grpc::listenerTLS:Dup: about to close old listener\n")
+
+	err = file.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	return listenerTLS{Listener: tls.NewListener(ln, l.config), innerListener: ln, config: l.config}, nil
+}
+
 // NewServergRPC returns a new CoreDNS GRPC server and compiles all plugin in to it.
 func NewServergRPC(addr string, group []*Config) (*ServergRPC, error) {
 
@@ -37,6 +65,8 @@ func NewServergRPC(addr string, group []*Config) (*ServergRPC, error) {
 
 // Serve implements caddy.TCPServer interface.
 func (s *ServergRPC) Serve(l net.Listener) error {
+	fmt.Printf("(KODEBUG)server-grpc: Serve called!!!!!!!!\n")
+	//debug.PrintStack()
 	s.m.Lock()
 	s.listenAddr = l.Addr()
 	s.m.Unlock()
@@ -53,7 +83,9 @@ func (s *ServergRPC) Serve(l net.Listener) error {
 
 	pb.RegisterDnsServiceServer(s.grpcServer, s)
 
-	return s.grpcServer.Serve(l)
+	err := s.grpcServer.Serve(l)
+	fmt.Printf("(KODEBUG)server-grpc: grpcServer.Server() return '%s'\n", err)
+	return err
 }
 
 // ServePacket implements caddy.UDPServer interface.
@@ -61,6 +93,7 @@ func (s *ServergRPC) ServePacket(p net.PacketConn) error { return nil }
 
 // Listen implements caddy.TCPServer interface.
 func (s *ServergRPC) Listen() (net.Listener, error) {
+	fmt.Printf("(KODEBUG)server-grpc: Listen called!!!!!!!!\n")
 
 	// The *tls* plugin must make sure that multiple conflicting
 	// TLS configuration return an error: it can only be specified once.
@@ -78,7 +111,10 @@ func (s *ServergRPC) Listen() (net.Listener, error) {
 	if tlsConfig == nil {
 		l, err = net.Listen("tcp", s.Addr[len(TransportGRPC+"://"):])
 	} else {
-		l, err = tls.Listen("tcp", s.Addr[len(TransportGRPC+"://"):], tlsConfig)
+		var innerListener net.Listener
+		innerListener, err = net.Listen("tcp", s.Addr[len(TransportGRPC+"://"):])
+		tlsListener := tls.NewListener(innerListener, tlsConfig)
+		l = listenerTLS{Listener: tlsListener, innerListener: innerListener, config: tlsConfig}
 	}
 
 	if err != nil {
@@ -93,6 +129,7 @@ func (s *ServergRPC) ListenPacket() (net.PacketConn, error) { return nil, nil }
 // OnStartupComplete lists the sites served by this server
 // and any relevant information, assuming Quiet is false.
 func (s *ServergRPC) OnStartupComplete() {
+	fmt.Printf("(KODEBUG)server-grpc: OnStartupComplete called!!!!!!!!\n")
 	if Quiet {
 		return
 	}
@@ -106,10 +143,14 @@ func (s *ServergRPC) OnStartupComplete() {
 // totally stopped.
 func (s *ServergRPC) Stop() (err error) {
 	s.m.Lock()
+	fmt.Printf("(KODEBUG)server-grpc: Stop called (1)!!!!!!!!\n")
+	//debug.PrintStack()
 	defer s.m.Unlock()
 	if s.grpcServer != nil {
+		fmt.Printf("(KODEBUG)server-grpc: about to call GracefulStop()!!!!!!!!\n")
 		s.grpcServer.GracefulStop()
 	}
+	fmt.Printf("(KODEBUG)server-grpc: Stop called (2)!!!!!!!!\n")
 	return
 }
 
@@ -148,6 +189,7 @@ func (s *ServergRPC) Query(ctx context.Context, in *pb.DnsPacket) (*pb.DnsPacket
 
 // Shutdown stops the server (non gracefully).
 func (s *ServergRPC) Shutdown() error {
+	fmt.Printf("(KODEBUG)server-grpc: Shutdown called!!!!!!!!\n")
 	if s.grpcServer != nil {
 		s.grpcServer.Stop()
 	}

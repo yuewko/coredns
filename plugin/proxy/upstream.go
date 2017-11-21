@@ -159,6 +159,7 @@ func parseBlock(c *caddyfile.Dispenser, u *staticUpstream) error {
 			u.ex = newGoogle("", boot) // "" for default in google.go
 		case "grpc":
 			if len(encArgs) == 2 && encArgs[1] == "insecure" {
+				fmt.Printf("(KODEBUG)coredns::proxy::upstream() create insecure grpc client!\n")
 				u.ex = newGrpcClient(nil, u)
 				return nil
 			}
