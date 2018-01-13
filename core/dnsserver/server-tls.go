@@ -12,6 +12,7 @@ import (
 // ServerTLS represents an instance of a TLS-over-DNS-server.
 type ServerTLS struct {
 	*Server
+	tlsConfig *tls.Config
 }
 
 // NewServerTLS returns a new CoreDNS TLS server and compiles all plugin in to it.
@@ -24,10 +25,17 @@ func NewServerTLS(addr string, group []*Config) (*ServerTLS, error) {
 	return &ServerTLS{Server: s}, nil
 }
 
+func (s *ServerTLS) createTLSListener(innerListener net.Listener) net.Listener {
+	return tls.NewListener(innerListener, s.tlsConfig)
+}
+
 // Serve implements caddy.TCPServer interface.
 func (s *ServerTLS) Serve(l net.Listener) error {
 	s.m.Lock()
 
+	if s.tlsConfig != nil {
+		l = s.createTLSListener(l)
+	}
 	// Only fill out the TCP server for this one.
 	s.server[tcp] = &dns.Server{Listener: l, Net: "tcp-tls", Handler: dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
 		ctx := context.Background()
@@ -45,26 +53,12 @@ func (s *ServerTLS) ServePacket(p net.PacketConn) error { return nil }
 func (s *ServerTLS) Listen() (net.Listener, error) {
 	// The *tls* plugin must make sure that multiple conflicting
 	// TLS configuration return an error: it can only be specified once.
-	tlsConfig := new(tls.Config)
 	for _, conf := range s.zones {
 		// Should we error if some configs *don't* have TLS?
-		tlsConfig = conf.TLSConfig
+		s.tlsConfig = conf.TLSConfig
 	}
 
-	var (
-		l   net.Listener
-		err error
-	)
-
-	if tlsConfig == nil {
-		l, err = net.Listen("tcp", s.Addr[len(TransportTLS+"://"):])
-	} else {
-		var innerListener net.Listener
-		innerListener, err = net.Listen("tcp", s.Addr[len(TransportGRPC+"://"):])
-		tlsListener := tls.NewListener(innerListener, tlsConfig)
-		l = listenerTLS{Listener: tlsListener, innerListener: innerListener}
-	}
-
+	l, err := net.Listen("tcp", s.Addr[len(TransportTLS+"://"):])
 	if err != nil {
 		return nil, err
 	}
