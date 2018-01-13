@@ -31,19 +31,15 @@ func NewServergRPC(addr string, group []*Config) (*ServergRPC, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The *tls* plugin must make sure that multiple conflicting
+	// TLS configuration return an error: it can only be specified once.
 	var tlsConfig *tls.Config
 	for _, conf := range s.zones {
 		// Should we error if some configs *don't* have TLS?
 		tlsConfig = conf.TLSConfig
 	}
-	gs := &ServergRPC{Server: s, tlsConfig: tlsConfig}
-	return gs, nil
-}
 
-func (s *ServergRPC) createTLSListener(innerListener net.Listener) net.Listener {
-	fmt.Printf("[TRACE] createTLSListener() called....\n")
-	//fmt.Printf("[TRACE] createTLSListener() tlsConfig is '%v'....\n", s.tlsConfig)
-	return tls.NewListener(innerListener, s.tlsConfig)
+	return &ServergRPC{Server: s, tlsConfig: tlsConfig}, nil
 }
 
 // Serve implements caddy.TCPServer interface.
@@ -66,12 +62,11 @@ func (s *ServergRPC) Serve(l net.Listener) error {
 
 	pb.RegisterDnsServiceServer(s.grpcServer, s)
 
-	ln := l
 	if s.tlsConfig != nil {
-		ln = s.createTLSListener(l)
+		l = tls.NewListener(l, s.tlsConfig)
 	}
-	fmt.Printf("[TRACE] Serve() ln is '%T'....\n", ln)
-	return s.grpcServer.Serve(ln)
+	fmt.Printf("[TRACE] Serve() l is '%T'....\n", l)
+	return s.grpcServer.Serve(l)
 }
 
 // ServePacket implements caddy.UDPServer interface.
@@ -80,15 +75,6 @@ func (s *ServergRPC) ServePacket(p net.PacketConn) error { return nil }
 // Listen implements caddy.TCPServer interface.
 func (s *ServergRPC) Listen() (net.Listener, error) {
 	fmt.Printf("[TRACE] Listen() called....\n")
-	// The *tls* plugin must make sure that multiple conflicting
-	// TLS configuration return an error: it can only be specified once.
-        /*
-	var tlsConfig *tls.Config
-	for _, conf := range s.zones {
-		// Should we error if some configs *don't* have TLS?
-		tlsConfig = conf.TLSConfig
-	}
-        */
 
 	l, err := net.Listen("tcp", s.Addr[len(TransportGRPC+"://"):])
 	if err != nil {
