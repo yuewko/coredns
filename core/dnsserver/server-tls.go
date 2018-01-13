@@ -21,12 +21,15 @@ func NewServerTLS(addr string, group []*Config) (*ServerTLS, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The *tls* plugin must make sure that multiple conflicting
+	// TLS configuration return an error: it can only be specified once.
+	var tlsConfig *tls.Config
+	for _, conf := range s.zones {
+		// Should we error if some configs *don't* have TLS?
+		tlsConfig = conf.TLSConfig
+	}
 
-	return &ServerTLS{Server: s}, nil
-}
-
-func (s *ServerTLS) createTLSListener(innerListener net.Listener) net.Listener {
-	return tls.NewListener(innerListener, s.tlsConfig)
+	return &ServerTLS{Server: s, tlsConfig: tlsConfig}, nil
 }
 
 // Serve implements caddy.TCPServer interface.
@@ -34,8 +37,9 @@ func (s *ServerTLS) Serve(l net.Listener) error {
 	s.m.Lock()
 
 	if s.tlsConfig != nil {
-		l = s.createTLSListener(l)
+		l = tls.NewListener(l, s.tlsConfig)
 	}
+
 	// Only fill out the TCP server for this one.
 	s.server[tcp] = &dns.Server{Listener: l, Net: "tcp-tls", Handler: dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
 		ctx := context.Background()
@@ -51,13 +55,6 @@ func (s *ServerTLS) ServePacket(p net.PacketConn) error { return nil }
 
 // Listen implements caddy.TCPServer interface.
 func (s *ServerTLS) Listen() (net.Listener, error) {
-	// The *tls* plugin must make sure that multiple conflicting
-	// TLS configuration return an error: it can only be specified once.
-	for _, conf := range s.zones {
-		// Should we error if some configs *don't* have TLS?
-		s.tlsConfig = conf.TLSConfig
-	}
-
 	l, err := net.Listen("tcp", s.Addr[len(TransportTLS+"://"):])
 	if err != nil {
 		return nil, err
