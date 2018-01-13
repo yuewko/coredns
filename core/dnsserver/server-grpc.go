@@ -20,34 +20,8 @@ import (
 type ServergRPC struct {
 	*Server
 	grpcServer *grpc.Server
-
 	listenAddr net.Addr
-}
-
-type listenerTLS struct {
-	net.Listener
-	innerListener net.Listener
-	config        *tls.Config
-}
-
-// Dup implemenents caddy.Duppablelistener interface
-func (l listenerTLS) Dup() (net.Listener, error) {
-	file, err := l.innerListener.(*net.TCPListener).File()
-	if err != nil {
-		return nil, err
-	}
-
-	ln, err := net.FileListener(file)
-	if err != nil {
-		return nil, err
-	}
-
-	err = file.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	return listenerTLS{Listener: tls.NewListener(ln, l.config), innerListener: ln, config: l.config}, nil
+	tlsConfig  *tls.Config
 }
 
 // NewServergRPC returns a new CoreDNS GRPC server and compiles all plugin in to it.
@@ -58,6 +32,10 @@ func NewServergRPC(addr string, group []*Config) (*ServergRPC, error) {
 	}
 	gs := &ServergRPC{Server: s}
 	return gs, nil
+}
+
+func (s *ServergRPC) createTLSListener(innerListener net.Listener) net.Listener {
+	return tls.NewListener(innerListener, s.tlsConfig)
 }
 
 // Serve implements caddy.TCPServer interface.
@@ -78,6 +56,9 @@ func (s *ServergRPC) Serve(l net.Listener) error {
 
 	pb.RegisterDnsServiceServer(s.grpcServer, s)
 
+	if s.tlsConfig != nil {
+		l = s.createTLSListener(l)
+	}
 	return s.grpcServer.Serve(l)
 }
 
@@ -88,26 +69,12 @@ func (s *ServergRPC) ServePacket(p net.PacketConn) error { return nil }
 func (s *ServergRPC) Listen() (net.Listener, error) {
 	// The *tls* plugin must make sure that multiple conflicting
 	// TLS configuration return an error: it can only be specified once.
-	tlsConfig := new(tls.Config)
 	for _, conf := range s.zones {
 		// Should we error if some configs *don't* have TLS?
-		tlsConfig = conf.TLSConfig
+		s.tlsConfig = conf.TLSConfig
 	}
 
-	var (
-		l   net.Listener
-		err error
-	)
-
-	if tlsConfig == nil {
-		l, err = net.Listen("tcp", s.Addr[len(TransportGRPC+"://"):])
-	} else {
-		var innerListener net.Listener
-		innerListener, err = net.Listen("tcp", s.Addr[len(TransportGRPC+"://"):])
-		tlsListener := tls.NewListener(innerListener, tlsConfig)
-		l = listenerTLS{Listener: tlsListener, innerListener: innerListener, config: tlsConfig}
-	}
-
+	l, err := net.Listen("tcp", s.Addr[len(TransportGRPC+"://"):])
 	if err != nil {
 		return nil, err
 	}
