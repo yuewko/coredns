@@ -26,7 +26,6 @@ type ServergRPC struct {
 
 // NewServergRPC returns a new CoreDNS GRPC server and compiles all plugin in to it.
 func NewServergRPC(addr string, group []*Config) (*ServergRPC, error) {
-	fmt.Printf("[TRACE] NewServergRPC() called....\n")
 	s, err := NewServer(addr, group)
 	if err != nil {
 		return nil, err
@@ -44,8 +43,6 @@ func NewServergRPC(addr string, group []*Config) (*ServergRPC, error) {
 
 // Serve implements caddy.TCPServer interface.
 func (s *ServergRPC) Serve(l net.Listener) error {
-	fmt.Printf("[TRACE] Serve() called....\n")
-	fmt.Printf("[TRACE] Serve() s is '%v'....\n", *s)
 	s.m.Lock()
 	s.listenAddr = l.Addr()
 	s.m.Unlock()
@@ -65,7 +62,6 @@ func (s *ServergRPC) Serve(l net.Listener) error {
 	if s.tlsConfig != nil {
 		l = tls.NewListener(l, s.tlsConfig)
 	}
-	fmt.Printf("[TRACE] Serve() l is '%T'....\n", l)
 	return s.grpcServer.Serve(l)
 }
 
@@ -74,7 +70,6 @@ func (s *ServergRPC) ServePacket(p net.PacketConn) error { return nil }
 
 // Listen implements caddy.TCPServer interface.
 func (s *ServergRPC) Listen() (net.Listener, error) {
-	fmt.Printf("[TRACE] Listen() called....\n")
 
 	l, err := net.Listen("tcp", s.Addr[len(TransportGRPC+"://"):])
 	if err != nil {
