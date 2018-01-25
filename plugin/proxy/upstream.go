@@ -28,15 +28,17 @@ type staticUpstream struct {
 func NewStaticUpstreams(c *caddyfile.Dispenser) ([]Upstream, error) {
 	var upstreams []Upstream
 	for c.Next() {
-		upstream, err := NewStaticUpstream(c)
+		u, err := NewStaticUpstream(c)
 		if err != nil {
 			return upstreams, err
 		}
-		upstreams = append(upstreams, upstream)
+		upstreams = append(upstreams, u)
 	}
 	return upstreams, nil
 }
 
+// NewStaticUpstream parses the configuration of a single upstream
+// starting from the FROM
 func NewStaticUpstream(c *caddyfile.Dispenser) (Upstream, error) {
 	upstream := &staticUpstream{
 		from: ".",
