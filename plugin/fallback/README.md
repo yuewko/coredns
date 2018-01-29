@@ -2,12 +2,12 @@
 
 ## Name
 
-*fallback* - a plugin that send queries to an alternate set of upstreams if the plugin
+*fallback* - a plugin that sends queries to an alternate set of upstreams if the plugin
 chain returns specific error messages.
 
 ## Description
 
-The *fallback* plugin allows an alternate set of upstreams be specified and which will be used
+The *fallback* plugin allows an alternate set of upstreams be specified which will be used
 if the plugin chain returns specific error messages. The *fallback* plugin utilizes the *proxy*
 plugin (<https://github.com/coredns/coredns/tree/master/plugin/proxy>) to query the specified
 upstreams.

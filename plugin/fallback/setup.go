@@ -39,10 +39,10 @@ func setup(c *caddy.Controller) error {
 			return plugin.Error("fallback", err)
 		}
 
-		oldU := f.mapper.Add(rc, u)
-		if oldU != nil {
+		if _, ok := f.rules[rc]; ok {
 			return fmt.Errorf("rcode '%s' is specified more than once", rcode)
 		}
+		f.rules[rc] = u
 	}
 
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
