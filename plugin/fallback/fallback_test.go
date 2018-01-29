@@ -6,6 +6,7 @@ import (
 
 	"github.com/miekg/dns"
 
+	"fmt"
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/pkg/dnstest"
 	"github.com/coredns/coredns/plugin/pkg/healthcheck"
@@ -35,8 +36,9 @@ func (c *testProxyCreator) Create(trace plugin.Handler, upstream proxy.Upstream)
 	c.called++
 
 	// Ensure that it is called with the expected Upstream
-	if c.expectedUpstream != upstream {
-		c.t.Fatal("Unexpected upstream passed to proxyCreator")
+	if c.expectedUpstream != nil && c.expectedUpstream != upstream {
+		c.t.Fatalf("Expected upstream passed to proxyCreator is '%v', but got '%v'",
+			c.expectedUpstream, upstream)
 	}
 
 	return &proxy.Proxy{Trace: trace, Upstreams: &[]proxy.Upstream{upstream}}
@@ -125,30 +127,99 @@ func TestFallback(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		handler := newFallback(nil)
-		handler.Next = stubNextHandler(tc.rcode, nil)
-		// add dummyUpstreams to upstream map according to the rcode field
-		for _, u := range dummyUpstreams {
-			handler.mapper.Add(u.rcode, u)
-		}
-		proxyCreator := &testProxyCreator{t: t, expectedUpstream: tc.expectedUpstream}
-		handler.proxy = proxyCreator
+		t.Run(fmt.Sprintf("rcode = %d", tc.rcode), func(t *testing.T) {
+			handler := newFallback(nil)
+			// create stub handler to return the test rcode
+			handler.Next = stubNextHandler(tc.rcode, nil)
+			// add dummyUpstreams to upstream map according to the rcode field
+			for _, u := range dummyUpstreams {
+				handler.mapper.Add(u.rcode, u)
+			}
+			proxyCreator := &testProxyCreator{t: t, expectedUpstream: tc.expectedUpstream}
+			handler.proxy = proxyCreator
 
-		ctx := context.TODO()
-		req := &dns.Msg{
-			Question: []dns.Question{{
-				Name:   "abc.com",
-				Qclass: dns.ClassINET,
-				Qtype:  dns.TypeA,
-			}},
-		}
+			ctx := context.TODO()
+			req := &dns.Msg{
+				Question: []dns.Question{{
+					Name:   "abc.com",
+					Qclass: dns.ClassINET,
+					Qtype:  dns.TypeA,
+				}},
+			}
 
-		rec := dnstest.NewRecorder(&test.ResponseWriter{})
-		_, _ = handler.ServeDNS(ctx, rec, req)
+			rec := dnstest.NewRecorder(&test.ResponseWriter{})
+			_, _ = handler.ServeDNS(ctx, rec, req)
 
-		// Ensure that the proxyCreator is called once
-		if proxyCreator.called != 1 {
-			t.Fatalf("Expect proxy creator to be called once, but got '%d", proxyCreator.called)
-		}
+			// Ensure that the proxyCreator is called once
+			if proxyCreator.called != 1 {
+				t.Fatalf("Expect proxy creator to be called once, but got '%d", proxyCreator.called)
+			}
+		})
+	}
+}
+
+func TestFallbackNotCalled(t *testing.T) {
+	// dummy Upstreams for servicing REFUSED
+	dummyRefusedUpstream := &dummyUpstream{rcode: dns.RcodeRefused}
+
+	handler := newFallback(nil)
+
+	// fallback only handle REFUSED
+	handler.mapper.Add(dummyRefusedUpstream.rcode, dummyRefusedUpstream)
+
+	proxyCreator := &testProxyCreator{t: t, expectedUpstream: nil}
+	handler.proxy = proxyCreator
+
+	ctx := context.TODO()
+	req := &dns.Msg{
+		Question: []dns.Question{{
+			Name:   "abc.com",
+			Qclass: dns.ClassINET,
+			Qtype:  dns.TypeA,
+		}},
+	}
+
+	rec := dnstest.NewRecorder(&test.ResponseWriter{})
+
+	// call fallback twice, once with stub returning NXDOMAIN...
+	handler.Next = stubNextHandler(dns.RcodeNameError, nil)
+	_, _ = handler.ServeDNS(ctx, rec, req)
+	// ....then with stub returning SERVFAIL
+	handler.Next = stubNextHandler(dns.RcodeServerFailure, nil)
+	_, _ = handler.ServeDNS(ctx, rec, req)
+
+	// The proxyCreator should never be called
+	if proxyCreator.called != 0 {
+		t.Fatalf("Expect proxy creator to not be called, but got '%d'", proxyCreator.called)
+	}
+}
+
+func TestFallbackCalledMany(t *testing.T) {
+	// dummy Upstreams for servicing REFUSED
+	dummyRefusedUpstream := &dummyUpstream{rcode: dns.RcodeRefused}
+
+	handler := newFallback(nil)
+	handler.Next = stubNextHandler(dns.RcodeRefused, nil)
+	// fallback only handle REFUSED
+	handler.mapper.Add(dummyRefusedUpstream.rcode, dummyRefusedUpstream)
+	proxyCreator := &testProxyCreator{t: t, expectedUpstream: dummyRefusedUpstream}
+	handler.proxy = proxyCreator
+
+	ctx := context.TODO()
+	req := &dns.Msg{
+		Question: []dns.Question{{
+			Name:   "abc.com",
+			Qclass: dns.ClassINET,
+			Qtype:  dns.TypeA,
+		}},
+	}
+
+	rec := dnstest.NewRecorder(&test.ResponseWriter{})
+	_, _ = handler.ServeDNS(ctx, rec, req)
+	_, _ = handler.ServeDNS(ctx, rec, req)
+
+	// The proxyCreator should be called twice
+	if proxyCreator.called != 2 {
+		t.Fatalf("Expect proxy creator to be called twice, but got '%d'", proxyCreator.called)
 	}
 }
