@@ -16,6 +16,24 @@ type Fallback struct {
 	Next  plugin.Handler
 	trace plugin.Handler
 	rules map[int]proxy.Upstream
+	proxy proxyCreator
+}
+
+// proxyCreator creates a proxy with the specified upstream
+type proxyCreator interface {
+	Create(trace plugin.Handler, upstream proxy.Upstream) plugin.Handler
+}
+
+// fallbackProxyCreator implements the proxyCreator interface
+// Used by the fallback plugin to create proxy using specified for upstream
+type fallbackProxyCreator struct{}
+
+func (f fallbackProxyCreator) Create(trace plugin.Handler, upstream proxy.Upstream) plugin.Handler {
+	return &proxy.Proxy{Trace: trace, Upstreams: &[]proxy.Upstream{upstream}}
+}
+
+func newFallback(trace plugin.Handler) (f *Fallback) {
+	return &Fallback{trace: trace, rules: make(map[int]proxy.Upstream), proxy: fallbackProxyCreator{}}
 }
 
 // ServeDNS implements the plugin.Handler interface.
@@ -30,7 +48,7 @@ func (f Fallback) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		rcode = nw.Msg.Rcode
 	}
 	if u, ok := f.rules[rcode]; ok {
-		p := &proxy.Proxy{Trace: f.trace, Upstreams: &[]proxy.Upstream{u}}
+		p := f.proxy.Create(f.trace, u)
 		return p.ServeDNS(ctx, w, r)
 	}
 	w.WriteMsg(nw.Msg)
