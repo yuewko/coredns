@@ -70,5 +70,4 @@ You can specify additional proxy parameters for each of the fallback upstreams.
     }
     log
 }
-
 ```

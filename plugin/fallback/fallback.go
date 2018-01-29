@@ -8,6 +8,7 @@ import (
 
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/pkg/nonwriter"
+	"github.com/coredns/coredns/plugin/proxy"
 )
 
 // Fallback plugin
@@ -33,6 +34,7 @@ func (f Fallback) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	if rcode == 0 {
 		rcode = nw.Msg.Rcode
 	}
+
 	if u, ok := f.mapper.Get(rcode); ok {
 		p := f.proxy.Create(f.trace, u)
 		return p.ServeDNS(ctx, w, r)
