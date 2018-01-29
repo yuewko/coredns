@@ -41,7 +41,6 @@ var Directives = []string{
 	"etcd",
 	"fallback",
 	"forward",
-	"fallback",
 	"proxy",
 	"erratic",
 	"whoami",
