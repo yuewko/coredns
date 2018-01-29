@@ -8,14 +8,18 @@ import (
 
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/pkg/nonwriter"
-	"github.com/coredns/coredns/plugin/proxy"
 )
 
 // Fallback plugin
 type Fallback struct {
-	Next  plugin.Handler
-	trace plugin.Handler
-	rules map[int]proxy.Upstream
+	Next   plugin.Handler
+	trace  plugin.Handler
+	mapper upstreamMapper
+	proxy  proxyCreator
+}
+
+func newFallback(trace plugin.Handler) (f *Fallback) {
+	return &Fallback{trace: trace, mapper: newFallbackUpstreamMapper(), proxy: fallbackProxyCreator{}}
 }
 
 // ServeDNS implements the plugin.Handler interface.
@@ -29,8 +33,8 @@ func (f Fallback) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	if rcode == 0 {
 		rcode = nw.Msg.Rcode
 	}
-	if u, ok := f.rules[rcode]; ok {
-		p := &proxy.Proxy{Trace: f.trace, Upstreams: &[]proxy.Upstream{u}}
+	if u, ok := f.mapper.Get(rcode); ok {
+		p := f.proxy.Create(f.trace, u)
 		return p.ServeDNS(ctx, w, r)
 	}
 	w.WriteMsg(nw.Msg)

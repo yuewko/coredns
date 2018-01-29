@@ -2,10 +2,11 @@ package fallback
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/proxy"
-	"strings"
 
 	"github.com/mholt/caddy"
 	"github.com/miekg/dns"
@@ -20,7 +21,7 @@ func init() {
 
 func setup(c *caddy.Controller) error {
 	t := dnsserver.GetConfig(c).Handler("trace")
-	f := &Fallback{trace: t, rules: make(map[int]proxy.Upstream)}
+	f := newFallback(t)
 
 	for c.Next() {
 		var rcode string
@@ -28,20 +29,20 @@ func setup(c *caddy.Controller) error {
 			return c.ArgErr()
 		}
 
-		fmt.Printf("Found rcode %s\n", rcode)
 		rc, ok := dns.StringToRcode[strings.ToUpper(rcode)]
 		if !ok {
 			return fmt.Errorf("%s is not a valid rcode", rcode)
 		}
-
-		fmt.Printf("Maps to rcode %d\n", rc)
 
 		u, err := proxy.NewStaticUpstream(&c.Dispenser)
 		if err != nil {
 			return plugin.Error("fallback", err)
 		}
 
-		f.rules[rc] = u
+		oldU := f.mapper.Add(rc, u)
+		if oldU != nil {
+			return fmt.Errorf("rcode '%s' is specified more than once", rcode)
+		}
 	}
 
 	dnsserver.GetConfig(c).AddPlugin(func(next plugin.Handler) plugin.Handler {
