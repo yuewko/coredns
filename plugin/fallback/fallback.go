@@ -2,13 +2,12 @@
 package fallback
 
 import (
-	"context"
-
 	"github.com/miekg/dns"
 
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/pkg/nonwriter"
 	"github.com/coredns/coredns/plugin/proxy"
+	"golang.org/x/net/context"
 )
 
 // Fallback plugin
