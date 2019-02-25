@@ -1,6 +1,7 @@
 package route53
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -68,9 +69,11 @@ func TestSetupRoute53(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		c := caddy.NewTestController("dns", test.body)
-		if err := setup(c, f); (err == nil) == test.expectedError {
-			t.Errorf("Unexpected errors: %v", err)
-		}
+		t.Run(fmt.Sprintf("Test case: '%s'", test.body), func(t *testing.T) {
+			c := caddy.NewTestController("dns", test.body)
+			if err := setup(c, f); (err == nil) == test.expectedError {
+				t.Errorf("Unexpected errors: %v", err)
+			}
+		})
 	}
 }
